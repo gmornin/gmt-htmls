@@ -11,20 +11,64 @@
     <title>Sign in - GoodMorning Tex</title>
   </head>
   <body>
+    <script type="module">
+      import init, { change_state, update, signin } from "/wasm/login/pkg/login.js";
+
+      (async () => {
+        await init();
+      })();
+
+      window.onpopstate = update;
+      window.wasm = { change_state, signin };
+    </script>
     <center>
       <img src="/images/icon-dark.svg" alt="" width="100" id="icon" />
       <h1 id="title">GoodMorning, Tex</h1>
     </center>
     <div id="login-form" class="container">
-      <label for="username">Username or email address</label>
-      <input type="text" name="username" id="username" />
-      <label for="password">Password</label>
-      <a href="" id="forgot" class="linklike">Forgot password?</a>
-      <input type="password" name="password" id="password" />
-      <button id="submit">Sign in</button>
+      <div class="signin">
+        <label for="username">Username or email address</label>
+        <input type="text" name="identifier" id="identifier" />
+        <label for="password">Password</label>
+        <a href="" id="forgot" class="linklike">Forgot password?</a>
+        <input type="password" name="password" id="password" />
+        <button id="submit-signin" class="submit" onclick="wasm.signin()">Sign in</button>
+      </div>
+      <div class="signup">
+        <label for="email">Email address</label>
+        <input type="text" name="email" id="email" />
+        <label for="username">Username</label>
+        <input type="text" name="username" id="username" />
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password" />
+        <label for="password">Confirm password</label>
+        <input type="password" name="confirm" id="confirm" />
+        <button id="submit-create" class="submit">Create account</button>
+      </div>
+      <p id="error-display" class="hide"></p>
     </div>
     <div class="container">
-	    <center>New here? <a href="./login.html?type=new" id="noaccount" class="linklike">Create an account</a></center>
+      <center class="signin">
+        New here?
+        <button
+          id="noaccount"
+          class="linklike"
+          onclick="
+	  wasm.change_state('signup')"
+        >
+          Create an account
+        </button>
+      </center>
+      <center class="signup">
+        Already have an account?
+        <button
+          id="hasaccount"
+          class="linklike"
+          onclick="wasm.change_state('signin')"
+        >
+          Sign in instead
+        </button>
+      </center>
     </div>
   </body>
 </html>
