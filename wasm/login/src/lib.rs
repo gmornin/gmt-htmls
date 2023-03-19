@@ -1,9 +1,10 @@
 mod utils;
 
-use js_sys::RegExp;
+use js_sys::{RegExp, JSON};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
-use web_sys::{RequestInit, UrlSearchParams, Document, HtmlInputElement, HtmlButtonElement, Headers};
+use wasm_bindgen_futures::JsFuture;
+use web_sys::*;
 
 const GMT: &str = " - GMT";
 
@@ -66,7 +67,7 @@ pub fn change_state(t: &str) {
 }
 
 #[wasm_bindgen]
-pub fn signin() {
+pub async fn signin() -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     let doc = window.document().unwrap();
     let identifier = get_value(&doc, "identifier");
@@ -80,21 +81,21 @@ pub fn signin() {
         (false, false) => None,
     };
 
-    let identifier_type = match (identifier.contains("@") ,RegExp::new(".+@.+\\..+", "").exec(&identifier).is_some()) {
+    let identifier_type = match (
+        identifier.contains("@"),
+        RegExp::new(".+@.+\\..+", "").exec(&identifier).is_some(),
+    ) {
         (_, true) => IdentifierType::Email,
         (true, false) => {
             error = Some("Invalid email address");
             IdentifierType::Username
-        },
+        }
         _ => IdentifierType::Username,
     };
 
-    error_display.set_text_content(error);
     if error.is_some() {
-        error_display.class_list().remove_1("hide").unwrap();
-        return;
-    } else {
-        error_display.class_list().add_1("hide").unwrap();
+        update_error(&error_display, error)?;
+        return Ok(());
     }
 
     let req = GetToken {
@@ -103,38 +104,94 @@ pub fn signin() {
         password,
     };
 
+    let headers = Headers::new()?;
+    headers.append("content-type", "application/json")?;
+
     disable_buttons(&doc, true);
 
-    let ok = Closure::new(move |res| {
-        web_sys::console::log_1(&res);
-        disable_buttons(&doc, false);
-    });
+    let res = JsFuture::from(
+        window.fetch_with_str_and_init(
+            "/api/v1/account/gettoken",
+            &RequestInit::new()
+                .method("POST")
+                .headers(&headers)
+                .body(Some(&JsValue::from(JSON::stringify(
+                    &serde_wasm_bindgen::to_value(&req)?,
+                )?))),
+        ),
+    )
+    .await?;
 
-    let headers = Headers::new().unwrap();
-    headers.append("content-type", "application/json").unwrap();
+    let json = JsFuture::from(res.dyn_ref::<Response>().unwrap().json()?).await?;
+    let res: Responses = serde_wasm_bindgen::from_value(json)?;
 
-    web_sys::console::log_1(&serde_wasm_bindgen::to_value(&req).unwrap());
+    let error = match res {
+        Responses::GetToken { token } => {
+            web_sys::console::log_1(&JsValue::from_str(&token));
+            None
+        }
+        Responses::Error { kind } => Some(match kind {
+            ErrorKind::NoSuchUser => "No user with that name or email address",
+            ErrorKind::PasswordIncorrect => "Incorrect password",
+            ErrorKind::External(e) => {
+                web_sys::console::error_1(&JsValue::from_str(&e));
+                "An external error occured (check console for more info)"
+            }
+        }),
+    };
 
-    let _ = window
-        .fetch_with_str_and_init("/api/v1/account/gettoken", &RequestInit::new().method("POST").headers(&headers).body(Some(&serde_wasm_bindgen::to_value(&req).unwrap())))
-        .then(&ok);
+    update_error(&error_display, error)?;
 
-    ok.forget();
+    disable_buttons(&doc, false);
+
+    Ok(())
 }
 
-
 #[wasm_bindgen]
-pub fn get_value(doc: &Document, id: &str) -> String {
-    doc.get_element_by_id(id).unwrap().dyn_ref::<HtmlInputElement>().unwrap().value()
+pub async fn handle_enter() -> Result<(), JsValue> {
+    let window = web_sys::window().unwrap();
+    let params_string = window.location().search().unwrap();
+    let params =
+        UrlSearchParams::new_with_str(&params_string).unwrap_or(UrlSearchParams::new().unwrap());
+    let r#type = params.get("type").unwrap_or_default();
+
+    match r#type.as_str() {
+        "new" => todo!(),
+        _ => signin().await,
+    }
 }
 
-#[wasm_bindgen]
-pub fn disable_buttons(doc: &Document, val: bool) {
+fn update_error(disp: &Element, error: Option<&str>) -> Result<(), JsValue> {
+    disp.set_text_content(error);
+    if error.is_some() {
+        disp.class_list().remove_1("hide")?;
+    } else {
+        disp.class_list().add_1("hide")?;
+    }
+
+    Ok(())
+}
+
+fn get_value(doc: &Document, id: &str) -> String {
+    doc.get_element_by_id(id)
+        .unwrap()
+        .dyn_ref::<HtmlInputElement>()
+        .unwrap()
+        .value()
+}
+
+fn disable_buttons(doc: &Document, val: bool) {
     let signin = doc.get_element_by_id("submit-signin").unwrap();
     let signup = doc.get_element_by_id("submit-create").unwrap();
-    signin.dyn_ref::<HtmlButtonElement>().unwrap().set_disabled(val);
-    signup.dyn_ref::<HtmlButtonElement>().unwrap().set_disabled(val);
-    
+    signin
+        .dyn_ref::<HtmlButtonElement>()
+        .unwrap()
+        .set_disabled(val);
+    signup
+        .dyn_ref::<HtmlButtonElement>()
+        .unwrap()
+        .set_disabled(val);
+
     if val {
         signin.set_text_content(Some("Signing in..."));
         signup.set_text_content(Some("Creating account..."))
@@ -146,7 +203,7 @@ pub fn disable_buttons(doc: &Document, val: bool) {
 
 #[derive(Deserialize)]
 #[serde(tag = "type")]
-pub enum Responses {
+enum Responses {
     #[serde(rename = "error")]
     Error { kind: ErrorKind },
     #[serde(rename = "token")]
@@ -154,7 +211,7 @@ pub enum Responses {
 }
 
 #[derive(Deserialize)]
-pub enum ErrorKind {
+enum ErrorKind {
     #[serde(rename = "no such user")]
     NoSuchUser,
     #[serde(rename = "password incorrect")]
@@ -170,8 +227,8 @@ struct GetToken {
     pub password: String,
 }
 
-#[derive(Serialize)]
-pub enum IdentifierType {
+#[derive(Serialize, PartialEq, Eq, Clone, Copy)]
+enum IdentifierType {
     #[serde(rename = "email")]
     Email,
     #[serde(rename = "id")]

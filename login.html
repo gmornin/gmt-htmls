@@ -3,16 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="/css/main.css" />
-    <link rel="stylesheet" href="/css/login.css" />
-    <link rel="stylesheet" href="/css/dark/main.css" />
-    <link rel="stylesheet" href="/css/dark/login.css" />
-    <link rel="shortcut icon" href="/images/favicon.svg" type="image/x-icon" />
+    <link rel="stylesheet" href="/static/css/main.css" />
+    <link rel="stylesheet" href="/static/css/login.css" />
+    <link rel="stylesheet" href="/static/css/dark/main.css" />
+    <link rel="stylesheet" href="/static/css/dark/login.css" />
+    <link
+      rel="shortcut icon"
+      href="/static/images/favicon-dark.svg"
+      type="image/x-icon"
+    />
     <title>Sign in - GoodMorning Tex</title>
   </head>
   <body>
     <script type="module">
-      import init, { change_state, update, signin } from "/wasm/login/pkg/login.js";
+      import init, {
+        change_state,
+        update,
+        signin,
+        handle_enter,
+      } from "/static/wasm/login/login.js";
 
       (async () => {
         await init();
@@ -20,9 +29,14 @@
 
       window.onpopstate = update;
       window.wasm = { change_state, signin };
+      window.onkeydown = (event) => {
+        if (event.key === "Enter") {
+          handle_enter();
+        }
+      };
     </script>
     <center>
-      <img src="/images/icon-dark.svg" alt="" width="100" id="icon" />
+      <img src="/static/images/icon-dark.svg" alt="" width="100" id="icon" />
       <h1 id="title">GoodMorning, Tex</h1>
     </center>
     <div id="login-form" class="container">
@@ -32,9 +46,11 @@
         <label for="password">Password</label>
         <a href="" id="forgot" class="linklike">Forgot password?</a>
         <input type="password" name="password" id="password" />
-        <button id="submit-signin" class="submit" onclick="wasm.signin()">Sign in</button>
+        <button id="submit-signin" class="submit" onclick="wasm.signin()">
+          Sign in
+        </button>
       </div>
-      <div class="signup">
+      <div class="signup hide">
         <label for="email">Email address</label>
         <input type="text" name="email" id="email" />
         <label for="username">Username</label>
@@ -59,7 +75,7 @@
           Create an account
         </button>
       </center>
-      <center class="signup">
+      <center class="signup hide">
         Already have an account?
         <button
           id="hasaccount"
